@@ -1,4 +1,5 @@
-node.js lib for storing time series data on disk, similar to RRD.
+hoard
+=====
 
 Hoard is a library for storing time series data data on disk in an efficient way.
 The format lends itself very for collecting and recording data over time, for example
