@@ -1,0 +1,114 @@
+node.js lib for storing time series data on disk, similar to RRD.
+
+Hoard is a library for storing time series data data on disk in an efficient way.
+The format lends itself very for collecting and recording data over time, for example
+temperatures, CPU utilization, bandwidth consumption, requests per second and other metrics.
+It is very similar to RRD, but comes with a few improvements.
+
+Background
+----------
+Hoard is based on an existing file format called Whisper.
+It was designed by Chris Davis for the Graphite project and features improvements over the RRD file format.
+Whisper is implemented in Python and Hoard is merely a straight-forward port
+of that implementation over to node.js.
+
+RRD is a very well-known file format for storing time series data on disk and has been around for over a decade.
+The Whisper file format tries to overcome a few limitations with RRD that makes it impractical at certain times.
+This new file format address the following issues, currently found in RRD:
+Things adressed by WhisperThe following are problems with the RRD file format:
+
+  * No updates for a timestamp prior the most recent update
+    This makes it impossible to file old, possibly missed, updates to an RRD archive.
+    A big limitation when you try to be fault-tolerant and handle metrics arriving out-of-order.
+  * No batch updates
+    RRD doesn't support making updates of multiple values in a single batch.
+    Updating each value separately yields many unneccessary and expensive disk operations
+  * No irregular updates
+    When you update an RRD but don't follow up with another update soon, your original update will be lost.
+
+(These issues were prevalent in RRD at the time Whisper was designed, it may have changed since then)
+
+A simple implementation of RRD using C bindings was therefore out of the question for the reasons listed above.
+Using the C library would have required another native dependency and lot of glue getting it to work in an asynchronous manner.
+The current implementation in CoffeeScript is really straight-forward, checks in at around 600 LOC.
+Performance should really not be an issue compared to a native version since A) V8 is really fast and B) You're ultimately disk bound.
+In a high-throughput environment you are also very likely to be buffering your data an only write to disk at given intervals.
+
+The name "Hoard" was selected because of the meaning "A stock or store of money or valued objects, typically one that is secret or carefully guarded".
+(See http://en.wikipedia.org/wiki/Hoard)
+
+
+Installing
+----------
+Just use NPM and type:
+
+    npm install hoard
+
+
+Example
+-------
+
+    // Create a Hoard file for storing time series data.
+    // Inside of it there will be two archives with retention periods:
+    // 1) 1 second per point for a total of 60 points (60 seconds of data)
+    // 2) 10 second per point for a total of 600 points (100 minutes of data)
+    hoard.create('users.hoard', [[1, 60], [10, 600]], 0.5, function(err) {
+        if (err) throw err;
+        console.log('Hoard file created!');
+    });
+
+
+
+    // Update an existing Hoard file with value 1337 for timestamp 1311169605
+    // When doing multiple updates in batch, use updateMany() instead as it's faster
+    hoard.update('users.hoard', 1337, 1311169605, function(err) {
+        if (err) throw err;
+        console.log('Hoard file updated!');
+    });
+
+
+
+    // Update multiple values at once in an existing Hoard file.
+    // This function is much faster when dealing with multiple values
+    // that need to be written at once.
+    hoard.update('users.hoard', [[1312490305, 4976], [1312492105, 3742]], function(err) {
+        if (err) throw err;
+        console.log('Hoard file updated!');
+    });
+
+
+
+    // Retrieve data from a Hoard file between timestamps 1311161605 and 1311179605
+    hoard.fetch('users.hoard', 1311161605, 1311179605, function(err, timeInfo, values) {
+        if (err) throw err;
+        console.log('Values', values); // Displays an array of values
+    });
+
+
+Implementation details
+----------------------
+Hoard is written for node.js using CoffeeScript. Uses almost the same number of lines as
+the Python version. Probably requires some additional lines for async parts but those things certainly
+can be reduced by using more/better async/CoffeeScript idioms. It is a line-by-line port so perhaps there's
+a more fitting node.js paradigm that can be used to further improve readability and performance of this.
+
+Some dependencies such as underscore.js and async.js were packaged inside instead as a separate dependency.
+Not sure of the best practice of doing this, but depending on these packages through NPM felt unneccesary
+since they both are pure JS code.
+
+The tests are testing the implementation against the Python implementation to ensure
+maximum compatibility. They don't require the Python version to be installed but rather uses
+files generated by it. The tests were implemented using Expresso after some experimentation with Vows.
+Ran into some issues with Vows and decided to use the much simpler (and dumber) Expresso instead.
+
+
+Authors
+-------
+
+  - Carl Bystr&ouml;m ([@cgbystrom](http://twitter.com/cgbystrom))
+  - Original file format design by Chris Davis
+
+License
+-------
+
+Open-source licensed under the MIT license (see _LICENSE_ file for details).
