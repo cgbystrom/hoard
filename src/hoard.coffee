@@ -1,12 +1,11 @@
-fs = require('fs')
+fs = require 'fs'
 Buffer = require('buffer').Buffer
-Binary = require('binary')
-_ = underscore = require('underscore')
-async = require('async')
+Binary = require 'binary'
+underscore = _ = require 'underscore'
+async = require 'async'
 pack = require('jspack').jspack
-path = require('path')
-Put = require('put')
-
+path = require 'path'
+Put = require 'put'
 
 # Monkey patch since modulo operator is broken in JS
 Number.prototype.mod = (n) -> ((@ % n) + n) % n
@@ -25,9 +24,6 @@ metadataFormat = "!2LfL"
 metadataSize = pack.CalcLength(metadataFormat)
 archiveInfoFormat = "!3L"
 archiveInfoSize = pack.CalcLength(archiveInfoFormat)
-
-# FIXME: Determine this in a better way
-POINT_SIZE = 4 + 8 # long, double
 
 unixTime = -> parseInt(new Date().getTime() / 1000)
 
@@ -95,43 +91,23 @@ propagate = (fd, timestamp, xff, higher, lower, cb) ->
         relativeLastOffset = (relativeFirstOffset + higherSize).mod(higher.size)
         higherLastOffset = relativeLastOffset + higher.offset
 
-        # !!!!!!!!!!!!!!!!!
-        #fh.seek(higherFirstOffset)
-        #console.log 'seriesSize'
-        #console.log 'seriesSize', 123
         if higherFirstOffset < higherLastOffset
             # We don't wrap the archive
-
             seriesSize = higherLastOffset - higherFirstOffset
-
             seriesString = new Buffer(seriesSize)
-
-            #console.log 'seriesSize', seriesSize
-            #console.log 'seriesSize', seriesSize
 
             fs.read fd, seriesString, 0, seriesSize, higherFirstOffset, (err, written, buffer) ->
                 parseSeries(seriesString)
-            #parseSeries(seriesString)
-
         else
-            console.log 'seriesSize', 124
             # We do wrap the archive
             higherEnd = higher.offset + higher.size
-            # !!!!!!!!!!!!!!!!!
             firstSeriesSize = higherEnd - higherFirstOffset
             secondSeriesSize = higherLastOffset - higher.offset
 
             seriesString = new Buffer(firstSeriesSize + secondSeriesSize)
 
-            console.log 'seriesSize here', (firstSeriesSize + secondSeriesSize)
-            console.log 'higherFirstOffset', higherFirstOffset
-            console.log 'firstSeriesSize', firstSeriesSize
-            console.log 'ASDASD'
             fs.read fd, seriesString, 0, firstSeriesSize, higherFirstOffset, (err, written, buffer) ->
                 cb(err) if err
-                console.log 'higher.offset', higher.offset
-                console.log 'firstSeriesSize', firstSeriesSize
-                console.log 'secondSeriesSize', secondSeriesSize
                 if secondSeriesSize > 0
                     fs.read fd, seriesString, firstSeriesSize, secondSeriesSize, higher.offset, (err, written, buffer) ->
                         cb(err) if err
@@ -195,12 +171,8 @@ propagate = (fd, timestamp, xff, higher, lower, cb) ->
                     byteDistance = pointDistance * pointSize
                     offset = lower.offset + byteDistance.mod(lower.size)
 
-                #console.log 'myPackedPoint', myPackedPoint
-                #console.log 'pointSize', pointSize
-                #console.log 'offset', offset
                 mypp = new Buffer(myPackedPoint)
                 fs.write fd, mypp, 0, pointSize, offset, (err) ->
-                    #console.log 'apa'
                     cb(null, true)
         else
             cb(null, false)
@@ -216,8 +188,6 @@ update = (filename, value, timestamp, cb) ->
         if not (diff < header.maxRetention and diff >= 0)
             cb(new Error('Timestamp not covered by any archives in this database.'))
             return
-
-        #console.log('Header', header)
 
         # Find the highest-precision archive that covers timestamp
         for i in [0...header.archives.length]
@@ -280,7 +250,6 @@ updateMany = (filename, points, cb) ->
             currentArchive = header.archives[currentArchiveIndex]
             currentPoints = []
 
-            console.log 'HEJ'
             updateArchiveCalls = []
             for point in points
                 age = now - point[0]
@@ -307,20 +276,15 @@ updateMany = (filename, points, cb) ->
 
                 currentPoints.push(point)
 
-            console.log 'last uac'
             async.series updateArchiveCalls, (err, results) ->
                 throw err if err
-                console.log 'async series 1'
                 if currentArchive and currentPoints.length > 0
                     # Don't forget to commit after we've checked all the archives
                     currentPoints.reverse()
-                    console.log 'async series 2'
                     updateManyArchive fd, header, currentArchive, currentPoints, (err) ->
-                        console.log 'async series 3'
                         throw err if err
                         fs.close fd, cb
                 else
-                    console.log 'DONE IN UAC'
                     fs.close fd, cb
 
             # FIXME: touch last update
@@ -328,23 +292,18 @@ updateMany = (filename, points, cb) ->
             # FIXME: close fd fh.close()
         #cb(null)
 
-
-
 updateManyArchive = (fd, header, archive, points, cb) ->
     step = archive.secondsPerPoint
     alignedPoints = []
-    #alignedPoints = [(timestamp - (timestamp % step), value) for (timestamp,value) in points]
     for p in points
         [timestamp, value] = p
         alignedPoints.push([timestamp - timestamp.mod(step), value])
-
 
     # Create a packed string for each contiguous sequence of points
     packedStrings = []
     previousInterval = null
     currentString = []
 
-    #console.log 'ap', alignedPoints
     for ap in alignedPoints
         [interval, value] = ap
 
@@ -361,19 +320,12 @@ updateManyArchive = (fd, header, archive, points, cb) ->
     if currentString.length > 0
         numberOfPoints = currentString.length / pointSize
         startInterval = previousInterval - (step * (numberOfPoints - 1))
-        console.log 'packing', startInterval, currentString
         packedStrings.push([startInterval, new Buffer(currentString, 'binary')])
 
-    # FIXME!!!
-    # currentString is an array with tuples of arrayer of data
-    # convert to buffers before writing
-
-    console.log 'APA1'
     # Read base point and determine where our writes will start
     packedBasePoint = new Buffer(pointSize)
     fs.read fd, packedBasePoint, 0, pointSize, archive.offset, (err) ->
         cb err if err
-        console.log 'APA2'
         [baseInterval, baseValue] = pack.Unpack(pointFormat, packedBasePoint)
 
         if baseInterval == 0
@@ -392,47 +344,32 @@ updateManyArchive = (fd, header, archive, points, cb) ->
             archiveEnd = archive.offset + archive.size
             bytesBeyond = (myOffset + packedString.length) - archiveEnd
 
-            #console.log 'APA3'
-            #fh.seek(myOffset)
             if bytesBeyond > 0
-                # FIXME fh.write( packedString[:-bytesBeyond] ) # Everything but not last bytesBeyond
-                #console.log 'APA4'
                 fs.write fd, packedString, 0, packedString.length - bytesBeyond, myOffset, (err) ->
                     cb err if err
-                    #console.log 'APA4.1'
                     assert.equal archiveEnd, myOffset + packedString.length - bytesBeyond
                     #assert fh.tell() == archiveEnd, "archiveEnd=%d fh.tell=%d bytesBeyond=%d len(packedString)=%d" % (archiveEnd,fh.tell(),bytesBeyond,len(packedString))
                     # Safe because it can't exceed the archive (retention checking logic above)
                     fs.write fd, packedString, packedString.length - bytesBeyond, bytesBeyond, archive.offset, (err) ->
                         cb err if err
-                        #console.log 'APA4.2'
                         callback()
             else
-                ## FIXME ALL THIS SHIT IT IS A looping, ARGH WTF
-                #console.log 'APA5'
-                #console.log 'ps', ps
-                #console.log 'packedString', packedString
                 fs.write fd, packedString, 0, packedString.length, myOffset, (err) ->
-                    #console.log "HELLO?"
                     callback()
 
         async.forEachSeries packedStrings, writePackedString, (err) ->
             throw err if err
-            console.log 'Propagating to lower...'
             propagateLowerArchives()
-
 
         propagateLowerArchives = ->
             # Now we propagate the updates to lower-precision archives
             higher = archive
             lowerArchives = (arc for arc in header.archives when arc.secondsPerPoint > archive.secondsPerPoint)
-            console.log 'prop1'
 
             if lowerArchives.length > 0
                 # Collect a list of propagation calls to make
                 # This is easier than doing async looping
                 propagateCalls = []
-                console.log 'prop2'
                 for lower in lowerArchives
                     fit = (i) -> i - i.mod(lower.secondsPerPoint)
                     lowerIntervals = (fit(p[0]) for p in alignedPoints)
@@ -446,13 +383,10 @@ updateManyArchive = (fd, header, archive, points, cb) ->
                         cb err if err
                         callback err, result
 
-                #callPropagate()
                 async.forEachSeries propagateCalls, callPropagate, (err, result) ->
                     throw err if err
-                    console.log 'done dirty prop loop'
                     cb null
             else
-                console.log 'prop1.end'
                 cb null
 
 info = (path, cb) ->
@@ -480,7 +414,7 @@ info = (path, cb) ->
                     @tap (archive) ->
                         @flush()
                         archive.retention = archive.secondsPerPoint * archive.points
-                        archive.size = archive.points * POINT_SIZE
+                        archive.size = archive.points * pointSize
                         archives.push(archive)
             .tap ->
                 cb null,
@@ -521,36 +455,20 @@ fetch = (path, from, to, cb) ->
                     values = (null for n in [0...points])
                     cb(null, timeInfo, values)
                 else
-                    #console.log 'vars', vars
-                    #console.log 'fromInterval', fromInterval
-                    #console.log 'toInterval', toInterval
-
-                    #console.log '---------------'
                     # We have data in this hoard, let's read it
                     getOffset = (interval) ->
                         timeDistance = interval - vars.baseInterval
-                        #console.log 'timeDistance', timeDistance
                         pointDistance = timeDistance / archive.secondsPerPoint
-                        #console.log 'pointDistance', pointDistance
                         byteDistance = pointDistance * pointSize
-                        #console.log 'byteDistance', byteDistance
                         a = archive.offset + byteDistance.mod(archive.size)
-                        #console.log 'archive.offset', archive.offset
-                        #console.log 'archive.size', archive.size
-                        #console.log 'modulo', byteDistance.mod(archive.size)
                         a
 
                     fromOffset = getOffset(fromInterval)
                     toOffset = getOffset(toInterval)
 
-                    #console.log 'fromOffset', fromOffset
-                    #console.log 'toOffset', toOffset
-
-
                     fs.open path, 'r', (err, fd) ->
                         if err then throw err
                         if fromOffset < toOffset
-                            #console.log 'NO WRAP'
                             # We don't wrap around, can everything in a single read
                             size = toOffset - fromOffset
                             seriesBuffer = new Buffer(size)
@@ -573,16 +491,10 @@ fetch = (path, from, to, cb) ->
                                     fs.close(fd)
 
         unpack = (seriesData) ->
-            #console.log 'SERIES DATA', seriesData
-
-            #console.log((f for f in seriesData).join(","))
             # Optmize this?
-            numPoints = seriesData.length / POINT_SIZE
-            #console.log 'SERIES LEN', numPoints
+            numPoints = seriesData.length / pointSize
             seriesFormat = "!" + ('Ld' for f in [0...numPoints]).join("")
-            #console.log 'SERIES FORMAT', seriesFormat
             unpackedSeries = pack.Unpack(seriesFormat, seriesData)
-            #console.log 'SERIES UNPACKED', unpackedSeries
 
             # Use buffer/pre-allocate?
             valueList = (null for f in [0...numPoints])
