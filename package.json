@@ -1,0 +1,36 @@
+{
+  "name": "hoard",
+  "version": "0.1.0",
+  "description": "node.js lib for storing time series data on disk, similar to RRD.",
+  "homepage": "https://github.com/cgbystrom/hoard",
+  "author": "Carl Byström <cgbystrom@gmail.com>",
+  "keywords": ["timeseries", "rrd", "rrdtool", "db", "database", "metric", "stats", "statistics"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cgbystrom/hoard.git"
+  },
+  "bugs": {
+    "web": "https://github.com/cgbystrom/hoard/issues"
+  },
+  "directories": {
+    "lib": "./lib"
+  },
+  "engines": {
+    "node": ">= 0.4.0"
+  },
+  "dependencies": {
+    "request": ">= 1.2.0",
+    "put": ">= 0.0.5",
+    "binary": ">= 0.2.5"
+  },
+  "devDependencies": {
+    "coffee-script": ">= 1.0.1",
+    "expresso": ">= 0.8.1"
+  },
+  "licenses": [
+    {
+      "type": "MIT",
+      "url": "https://github.com/cgbystrom/hoard/raw/master/LICENSE"
+    }
+  ]
+}
