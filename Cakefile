@@ -55,7 +55,7 @@ runTests = (callback) ->
 
 clean = (callback) ->
   log "Removing build files ...", green
-  exec "rm test/*.hoard", (err, stdout) -> callback err
+  exec "rm -f test/*.hoard", (err, stdout) -> callback err
 task "clean", "Clean up build files", -> clean onError
 
 task "test", "Run all tests", ->
