@@ -43,7 +43,7 @@ task "install", "Install Hoard in your local repository", ->
 
 build = (callback) ->
   log "Compiling CoffeeScript to JavaScript ...", green
-  exec "rm -rf lib && coffee -c -l -b -o lib src", (err, stdout) -> callback err
+  exec "coffee -c -l -b -o lib src", (err, stdout) -> callback err
 task "build", "Compile CoffeeScript to JavaScript", -> build onError
 
 runTests = (callback) ->
