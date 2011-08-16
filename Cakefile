@@ -53,6 +53,11 @@ runTests = (callback) ->
     process.binding('stdio').writeError stderr
     callback err if callback
 
+clean = (callback) ->
+  log "Removing build files ...", green
+  exec "rm test/*.hoard", (err, stdout) -> callback err
+task "clean", "Clean up build files", -> clean onError
+
 task "test", "Run all tests", ->
   runTests (err) ->
     process.stdout.on "drain", -> process.exit -1 if err
