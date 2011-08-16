@@ -1,6 +1,6 @@
 {
   "name": "hoard",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "node.js lib for storing time series data on disk, similar to RRD.",
   "homepage": "https://github.com/cgbystrom/hoard",
   "author": "Carl Byström <cgbystrom@gmail.com> http://cgbystrom.com",
