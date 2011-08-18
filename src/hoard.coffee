@@ -1,9 +1,9 @@
 fs = require 'fs'
 Buffer = require('buffer').Buffer
 Binary = require 'binary'
-underscore = _ = require 'underscore'
-async = require 'async'
-pack = require('jspack').jspack
+underscore = _ = require '../lib/underscore'
+async = require '../lib/async'
+pack = require('../lib/jspack').jspack
 path = require 'path'
 Put = require 'put'
 
@@ -517,3 +517,4 @@ exports.update = update
 exports.updateMany = updateMany
 exports.info = info
 exports.fetch = fetch
+
