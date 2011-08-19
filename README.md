@@ -10,7 +10,7 @@ Background
 ----------
 Hoard is based on an existing file format called Whisper.
 It was designed by Chris Davis for the [Graphite][Graphite] project and features improvements over the RRD file format.
-Whisper is implemented in Python and Hoard is merely a straight-forward port
+Whisper is implemented in Python and Hoard is merely a straight-forward port
 of that implementation over to node.js.
 
 [RRD][RRD] is a very well-known file format for storing time series data on disk and has been around for over a decade.
@@ -106,8 +106,8 @@ Ran into some issues with Vows and decided to use the much simpler (and dumber) 
 Authors
 -------
 
-  - Carl Bystr&ouml;m ([@cgbystrom](http://twitter.com/cgbystrom))
-  - Original file format design by Chris Davis
+  - <a href="http://cgbystrom.com">Carl Bystr&ouml;m</a> ([@cgbystrom](http://twitter.com/cgbystrom))
+  - [Original file format design][Whisper] by Chris Davis
 
 License
 -------
