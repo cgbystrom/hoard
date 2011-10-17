@@ -454,14 +454,12 @@ info = (path, cb) ->
                     archives: archives
     return
 
-last = (path, at, cb) ->
+last = (path, cb) ->
     info path, (err, header) ->
         now = unixTime()
-        oldestTime = now - header.maxRetention
-        throw new Error('Invalid time interval') unless at > oldestTime
-        from = at-1
-        to = at
-        diff = at - from
+        from = now-1
+        to = now
+        diff = now - from
         fd = null
 
         # Find closest archive to look in, that will contain our information
