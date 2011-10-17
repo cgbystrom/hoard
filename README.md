@@ -105,11 +105,9 @@ Ran into some issues with Vows and decided to use the much simpler (and dumber) 
 Testing
 -------
 
-# [ cake setup ]
-# cake [ install | build ]
-# cake test
-
-
+  - [ cake setup ]
+  - cake [ install | build ]
+  - cake test
 
 Authors
 -------
