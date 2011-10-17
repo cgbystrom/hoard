@@ -73,49 +73,61 @@ propagate = (fd, timestamp, xff, higher, lower, cb) ->
     lowerIntervalEnd = lowerIntervalStart + lower.secondsPerPoint
 
     packedPoint = new Buffer(pointSize)
-    fs.read fd, packedPoint, 0, pointSize, higher.offset, (err, written, buffer) ->
-        cb(err) if err
-        [higherBaseInterval, higherBaseValue] = pack.Unpack(pointFormat, packedPoint)
-
-        if higherBaseInterval == 0
-            higherFirstOffset = higher.offset
-        else
-            timeDistance = lowerIntervalStart - higherBaseInterval
-            pointDistance = timeDistance / higher.secondsPerPoint
-            byteDistance = pointDistance * pointSize
-            higherFirstOffset = higher.offset + byteDistance.mod(higher.size)
-
-        higherPoints = lower.secondsPerPoint / higher.secondsPerPoint
-        higherSize = higherPoints * pointSize
-        relativeFirstOffset = higherFirstOffset - higher.offset
-        relativeLastOffset = (relativeFirstOffset + higherSize).mod(higher.size)
-        higherLastOffset = relativeLastOffset + higher.offset
-
-        if higherFirstOffset < higherLastOffset
-            # We don't wrap the archive
-            seriesSize = higherLastOffset - higherFirstOffset
-            seriesString = new Buffer(seriesSize)
-
-            fs.read fd, seriesString, 0, seriesSize, higherFirstOffset, (err, written, buffer) ->
-                parseSeries(seriesString)
-        else
-            # We do wrap the archive
-            higherEnd = higher.offset + higher.size
-            firstSeriesSize = higherEnd - higherFirstOffset
-            secondSeriesSize = higherLastOffset - higher.offset
-
-            seriesString = new Buffer(firstSeriesSize + secondSeriesSize)
-
-            fs.read fd, seriesString, 0, firstSeriesSize, higherFirstOffset, (err, written, buffer) ->
-                cb(err) if err
-                if secondSeriesSize > 0
-                    fs.read fd, seriesString, firstSeriesSize, secondSeriesSize, higher.offset, (err, written, buffer) ->
-                        cb(err) if err
+    try
+        fs.read fd, packedPoint, 0, pointSize, higher.offset, (err, written, buffer) ->
+            cb(err) if err
+            [higherBaseInterval, higherBaseValue] = pack.Unpack(pointFormat, packedPoint)
+        
+            if higherBaseInterval == 0
+                higherFirstOffset = higher.offset
+            else
+                timeDistance = lowerIntervalStart - higherBaseInterval
+                pointDistance = timeDistance / higher.secondsPerPoint
+                byteDistance = pointDistance * pointSize
+                higherFirstOffset = higher.offset + byteDistance.mod(higher.size)
+        
+            higherPoints = lower.secondsPerPoint / higher.secondsPerPoint
+            higherSize = higherPoints * pointSize
+            relativeFirstOffset = higherFirstOffset - higher.offset
+            relativeLastOffset = (relativeFirstOffset + higherSize).mod(higher.size)
+            higherLastOffset = relativeLastOffset + higher.offset
+        
+            if higherFirstOffset < higherLastOffset
+                # We don't wrap the archive
+                seriesSize = higherLastOffset - higherFirstOffset
+                seriesString = new Buffer(seriesSize)
+        
+                try
+                    fs.read fd, seriesString, 0, seriesSize, higherFirstOffset, (err, written, buffer) ->
                         parseSeries(seriesString)
-                else
-                    ret = new Buffer(firstSeriesSize)
-                    seriesString.copy(ret, 0, 0, firstSeriesSize)
-                    parseSeries(ret)
+                catch err
+                    cb(err)
+            else
+                # We do wrap the archive
+                higherEnd = higher.offset + higher.size
+                firstSeriesSize = higherEnd - higherFirstOffset
+                secondSeriesSize = higherLastOffset - higher.offset
+        
+                seriesString = new Buffer(firstSeriesSize + secondSeriesSize)
+        
+                try
+                    fs.read fd, seriesString, 0, firstSeriesSize, higherFirstOffset, (err, written, buffer) ->
+                        cb(err) if err
+                        if secondSeriesSize > 0
+                            try
+                                fs.read fd, seriesString, firstSeriesSize, secondSeriesSize, higher.offset, (err, written, buffer) ->
+                                    cb(err) if err
+                                    parseSeries(seriesString)
+                            catch err
+                                cb(err)
+                        else
+                            ret = new Buffer(firstSeriesSize)
+                            seriesString.copy(ret, 0, 0, firstSeriesSize)
+                            parseSeries(ret)
+                catch err
+                    cb(err)
+    catch err
+        cb(err)
 
     parseSeries = (seriesString) ->
         # Now we unpack the series data we just read
@@ -158,22 +170,25 @@ propagate = (fd, timestamp, xff, higher, lower, cb) ->
 
             # !!!!!!!!!!!!!!!!!
             packedPoint = new Buffer(pointSize)
-            fs.read fd, packedPoint, 0, pointSize, lower.offset, (err) ->
-                [lowerBaseInterval, lowerBaseValue] = pack.Unpack(pointFormat, packedPoint)
-
-                if lowerBaseInterval == 0
-                    # First propagated update to this lower archive
-                    offset = lower.offset
-                else
-                    # Not our first propagated update to this lower archive
-                    timeDistance = lowerIntervalStart - lowerBaseInterval
-                    pointDistance = timeDistance / lower.secondsPerPoint
-                    byteDistance = pointDistance * pointSize
-                    offset = lower.offset + byteDistance.mod(lower.size)
-
-                mypp = new Buffer(myPackedPoint)
-                fs.write fd, mypp, 0, pointSize, offset, (err) ->
-                    cb(null, true)
+            try
+                fs.read fd, packedPoint, 0, pointSize, lower.offset, (err) ->
+                    [lowerBaseInterval, lowerBaseValue] = pack.Unpack(pointFormat, packedPoint)
+                
+                    if lowerBaseInterval == 0
+                        # First propagated update to this lower archive
+                        offset = lower.offset
+                    else
+                        # Not our first propagated update to this lower archive
+                        timeDistance = lowerIntervalStart - lowerBaseInterval
+                        pointDistance = timeDistance / lower.secondsPerPoint
+                        byteDistance = pointDistance * pointSize
+                        offset = lower.offset + byteDistance.mod(lower.size)
+                
+                    mypp = new Buffer(myPackedPoint)
+                    fs.write fd, mypp, 0, pointSize, offset, (err) ->
+                        cb(null, true)
+            catch err
+                cb(err)
         else
             cb(null, false)
 
@@ -235,25 +250,28 @@ update = (filename, value, timestamp, cb) ->
                 else
                     fs.close fd, cb
                 
-            fs.read fd, packedPoint, 0, pointSize, archive.offset, (err, bytesRead, buffer) ->
-                cb(err) if err
-                [baseInterval, baseValue] = pack.Unpack(pointFormat, packedPoint)
-
-                if baseInterval == 0
-                    # This file's first update
-                    fs.write fd, myPackedPoint, 0, pointSize, archive.offset, (err, written, buffer) ->
-                        cb(err) if err
-                        [baseInterval, baseValue] = [myInterval, value]
-                        propagateLowerArchives()
-                else
-                    # File has been updated before
-                    timeDistance = myInterval - baseInterval
-                    pointDistance = timeDistance / archive.secondsPerPoint
-                    byteDistance = pointDistance * pointSize
-                    myOffset = archive.offset + byteDistance.mod(archive.size)
-                    fs.write fd, myPackedPoint, 0, pointSize, myOffset, (err, written, buffer) ->
-                        cb(err) if err
-                        propagateLowerArchives()
+            try
+                fs.read fd, packedPoint, 0, pointSize, archive.offset, (err, bytesRead, buffer) ->
+                    cb(err) if err
+                    [baseInterval, baseValue] = pack.Unpack(pointFormat, packedPoint)
+                
+                    if baseInterval == 0
+                        # This file's first update
+                        fs.write fd, myPackedPoint, 0, pointSize, archive.offset, (err, written, buffer) ->
+                            cb(err) if err
+                            [baseInterval, baseValue] = [myInterval, value]
+                            propagateLowerArchives()
+                    else
+                        # File has been updated before
+                        timeDistance = myInterval - baseInterval
+                        pointDistance = timeDistance / archive.secondsPerPoint
+                        byteDistance = pointDistance * pointSize
+                        myOffset = archive.offset + byteDistance.mod(archive.size)
+                        fs.write fd, myPackedPoint, 0, pointSize, myOffset, (err, written, buffer) ->
+                            cb(err) if err
+                            propagateLowerArchives()
+            catch err
+                cb(err)
 
     return
 
@@ -343,70 +361,73 @@ updateManyArchive = (fd, header, archive, points, cb) ->
 
     # Read base point and determine where our writes will start
     packedBasePoint = new Buffer(pointSize)
-    fs.read fd, packedBasePoint, 0, pointSize, archive.offset, (err) ->
-        cb err if err
-        [baseInterval, baseValue] = pack.Unpack(pointFormat, packedBasePoint)
-
-        if baseInterval == 0
-            # This file's first update
-            # Use our first string as the base, so we start at the start
-            baseInterval = packedStrings[0][0]
-
-        # Write all of our packed strings in locations determined by the baseInterval
-
-        writePackedString = (ps, callback) ->
-            [interval, packedString] = ps
-            timeDistance = interval - baseInterval
-            pointDistance = timeDistance / step
-            byteDistance = pointDistance * pointSize
-            myOffset = archive.offset + byteDistance.mod(archive.size)
-            archiveEnd = archive.offset + archive.size
-            bytesBeyond = (myOffset + packedString.length) - archiveEnd
-
-            if bytesBeyond > 0
-                fs.write fd, packedString, 0, packedString.length - bytesBeyond, myOffset, (err) ->
-                    cb err if err
-                    assert.equal archiveEnd, myOffset + packedString.length - bytesBeyond
-                    #assert fh.tell() == archiveEnd, "archiveEnd=%d fh.tell=%d bytesBeyond=%d len(packedString)=%d" % (archiveEnd,fh.tell(),bytesBeyond,len(packedString))
-                    # Safe because it can't exceed the archive (retention checking logic above)
-                    fs.write fd, packedString, packedString.length - bytesBeyond, bytesBeyond, archive.offset, (err) ->
+    try
+        fs.read fd, packedBasePoint, 0, pointSize, archive.offset, (err) ->
+            cb err if err
+            [baseInterval, baseValue] = pack.Unpack(pointFormat, packedBasePoint)
+        
+            if baseInterval == 0
+                # This file's first update
+                # Use our first string as the base, so we start at the start
+                baseInterval = packedStrings[0][0]
+        
+            # Write all of our packed strings in locations determined by the baseInterval
+        
+            writePackedString = (ps, callback) ->
+                [interval, packedString] = ps
+                timeDistance = interval - baseInterval
+                pointDistance = timeDistance / step
+                byteDistance = pointDistance * pointSize
+                myOffset = archive.offset + byteDistance.mod(archive.size)
+                archiveEnd = archive.offset + archive.size
+                bytesBeyond = (myOffset + packedString.length) - archiveEnd
+        
+                if bytesBeyond > 0
+                    fs.write fd, packedString, 0, packedString.length - bytesBeyond, myOffset, (err) ->
                         cb err if err
+                        assert.equal archiveEnd, myOffset + packedString.length - bytesBeyond
+                        #assert fh.tell() == archiveEnd, "archiveEnd=%d fh.tell=%d bytesBeyond=%d len(packedString)=%d" % (archiveEnd,fh.tell(),bytesBeyond,len(packedString))
+                        # Safe because it can't exceed the archive (retention checking logic above)
+                        fs.write fd, packedString, packedString.length - bytesBeyond, bytesBeyond, archive.offset, (err) ->
+                            cb err if err
+                            callback()
+                else
+                    fs.write fd, packedString, 0, packedString.length, myOffset, (err) ->
                         callback()
-            else
-                fs.write fd, packedString, 0, packedString.length, myOffset, (err) ->
-                    callback()
-
-        propagateLowerArchives = ->
-            # Now we propagate the updates to lower-precision archives
-            higher = archive
-            lowerArchives = (arc for arc in header.archives when arc.secondsPerPoint > archive.secondsPerPoint)
-
-            if lowerArchives.length > 0
-                # Collect a list of propagation calls to make
-                # This is easier than doing async looping
-                propagateCalls = []
-                for lower in lowerArchives
-                    fit = (i) -> i - i.mod(lower.secondsPerPoint)
-                    lowerIntervals = (fit(p[0]) for p in alignedPoints)
-                    uniqueLowerIntervals = _.uniq(lowerIntervals)
-                    for interval in uniqueLowerIntervals
-                        propagateCalls.push {interval: interval, header: header, higher: higher, lower: lower}
-                    higher = lower
-
-                callPropagate = (args, callback) ->
-                    propagate fd, args.interval, args.header.xFilesFactor, args.higher, args.lower, (err, result) ->
-                        cb err if err
-                        callback err, result
-
-                async.forEachSeries propagateCalls, callPropagate, (err, result) ->
-                    throw err if err
+        
+            propagateLowerArchives = ->
+                # Now we propagate the updates to lower-precision archives
+                higher = archive
+                lowerArchives = (arc for arc in header.archives when arc.secondsPerPoint > archive.secondsPerPoint)
+        
+                if lowerArchives.length > 0
+                    # Collect a list of propagation calls to make
+                    # This is easier than doing async looping
+                    propagateCalls = []
+                    for lower in lowerArchives
+                        fit = (i) -> i - i.mod(lower.secondsPerPoint)
+                        lowerIntervals = (fit(p[0]) for p in alignedPoints)
+                        uniqueLowerIntervals = _.uniq(lowerIntervals)
+                        for interval in uniqueLowerIntervals
+                            propagateCalls.push {interval: interval, header: header, higher: higher, lower: lower}
+                        higher = lower
+        
+                    callPropagate = (args, callback) ->
+                        propagate fd, args.interval, args.header.xFilesFactor, args.higher, args.lower, (err, result) ->
+                            cb err if err
+                            callback err, result
+        
+                    async.forEachSeries propagateCalls, callPropagate, (err, result) ->
+                        throw err if err
+                        cb null
+                else
                     cb null
-            else
-                cb null
-
-        async.forEachSeries packedStrings, writePackedString, (err) ->
-            throw err if err
-            propagateLowerArchives()
+        
+            async.forEachSeries packedStrings, writePackedString, (err) ->
+                throw err if err
+                propagateLowerArchives()
+    catch err
+        cb(err)
 
 info = (path, cb) ->
     # FIXME: Close this stream?
@@ -491,23 +512,32 @@ fetch = (path, from, to, cb) ->
                             # We don't wrap around, can everything in a single read
                             size = toOffset - fromOffset
                             seriesBuffer = new Buffer(size)
-                            fs.read fd, seriesBuffer, 0, size, fromOffset, (err, num) ->
-                                cb(err) if err
-                                fs.close fd, (err) ->
+                            try
+                                fs.read fd, seriesBuffer, 0, size, fromOffset, (err, num) ->
                                     cb(err) if err
-                                    unpack(seriesBuffer) # We have read it, go unpack!
+                                    fs.close fd, (err) ->
+                                        cb(err) if err
+                                        unpack(seriesBuffer) # We have read it, go unpack!
+                            catch err
+                                cb(err)
                         else
                             # We wrap around the archive, we need two reads
                             archiveEnd = archive.offset + archive.size
                             size1 = archiveEnd - fromOffset
                             size2 = toOffset - archive.offset
                             seriesBuffer = new Buffer(size1 + size2)
-                            fs.read fd, seriesBuffer, 0, size1, fromOffset, (err, num) ->
-                                cb(err) if err
-                                fs.read fd, seriesBuffer, size1, size2, archive.offset, (err, num) ->
+                            try
+                                fs.read fd, seriesBuffer, 0, size1, fromOffset, (err, num) ->
                                     cb(err) if err
-                                    unpack(seriesBuffer) # We have read it, go unpack!
-                                    fs.close(fd)
+                                    try
+                                        fs.read fd, seriesBuffer, size1, size2, archive.offset, (err, num) ->
+                                            cb(err) if err
+                                            unpack(seriesBuffer) # We have read it, go unpack!
+                                            fs.close(fd)
+                                    catch err
+                                        cb(err)
+                            catch err
+                                cb(err)
 
         unpack = (seriesData) ->
             # Optmize this?
