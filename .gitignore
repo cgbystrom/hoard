@@ -1,0 +1,3 @@
+node_modules
+lib/hoard.js
+test/*.hoard
