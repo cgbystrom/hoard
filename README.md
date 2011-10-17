@@ -72,7 +72,7 @@ hoard.update('users.hoard', 1337, 1311169605, function(err) {
 // Update multiple values at once in an existing Hoard file.
 // This function is much faster when dealing with multiple values
 // that need to be written at once.
-hoard.update('users.hoard', [[1312490305, 4976], [1312492105, 3742]], function(err) {
+hoard.updateMany('users.hoard', [[1312490305, 4976], [1312492105, 3742]], function(err) {
     if (err) throw err;
     console.log('Hoard file updated!');
 });
