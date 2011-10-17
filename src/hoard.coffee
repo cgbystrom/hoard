@@ -206,18 +206,35 @@ update = (filename, value, timestamp, cb) ->
             packedPoint = new Buffer(pointSize)
             
             propagateLowerArchives = ->
-                # Propagate the update to lower-precision archives
-                #higher = archive
-                #for lower in lowerArchives:
-                #    if not __propagate(fd, myInterval, header.xFilesFactor, higher, lower):
-                #        break
-                #    higher = lower
-
-                #__changeLastUpdate(fh)
-
-                # FIXME: Also fsync here?
-                fs.close fd, cb
-            
+                # complete hack (not proud of this), copied updateManyArchive's code for just one update.
+                alignedPoints = [ [ timestamp, value ] ]
+                # Now we propagate the updates to lower-precision archives
+                higher = archive
+                lowerArchives = (arc for arc in header.archives when arc.secondsPerPoint > archive.secondsPerPoint)
+                
+                if lowerArchives.length > 0
+                    # Collect a list of propagation calls to make
+                    # This is easier than doing async looping
+                    propagateCalls = []
+                    for lower in lowerArchives
+                        fit = (i) -> i - i.mod(lower.secondsPerPoint)
+                        lowerIntervals = (fit(p[0]) for p in alignedPoints)
+                        uniqueLowerIntervals = _.uniq(lowerIntervals)
+                        for interval in uniqueLowerIntervals
+                            propagateCalls.push {interval: interval, header: header, higher: higher, lower: lower}
+                        higher = lower
+                
+                    callPropagate = (args, callback) ->
+                        propagate fd, args.interval, args.header.xFilesFactor, args.higher, args.lower, (err, result) ->
+                            cb err if err
+                            callback err, result
+                
+                    async.forEachSeries propagateCalls, callPropagate, (err, result) ->
+                        throw err if err
+                        fs.close fd, cb
+                else
+                    fs.close fd, cb
+                
             fs.read fd, packedPoint, 0, pointSize, archive.offset, (err, bytesRead, buffer) ->
                 cb(err) if err
                 [baseInterval, baseValue] = pack.Unpack(pointFormat, packedPoint)
