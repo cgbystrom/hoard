@@ -204,6 +204,20 @@ update = (filename, value, timestamp, cb) ->
             myPackedPoint = new Buffer(pack.Pack(pointFormat, [myInterval, value]))
 
             packedPoint = new Buffer(pointSize)
+            
+            propagateLowerArchives = ->
+                # Propagate the update to lower-precision archives
+                #higher = archive
+                #for lower in lowerArchives:
+                #    if not __propagate(fd, myInterval, header.xFilesFactor, higher, lower):
+                #        break
+                #    higher = lower
+
+                #__changeLastUpdate(fh)
+
+                # FIXME: Also fsync here?
+                fs.close fd, cb
+            
             fs.read fd, packedPoint, 0, pointSize, archive.offset, (err, bytesRead, buffer) ->
                 cb(err) if err
                 [baseInterval, baseValue] = pack.Unpack(pointFormat, packedPoint)
@@ -224,18 +238,6 @@ update = (filename, value, timestamp, cb) ->
                         cb(err) if err
                         propagateLowerArchives()
 
-            propagateLowerArchives = ->
-                # Propagate the update to lower-precision archives
-                #higher = archive
-                #for lower in lowerArchives:
-                #    if not __propagate(fd, myInterval, header.xFilesFactor, higher, lower):
-                #        break
-                #    higher = lower
-
-                #__changeLastUpdate(fh)
-
-                # FIXME: Also fsync here?
-                fs.close fd, cb
     return
 
 updateMany = (filename, points, cb) ->
@@ -357,10 +359,6 @@ updateManyArchive = (fd, header, archive, points, cb) ->
                 fs.write fd, packedString, 0, packedString.length, myOffset, (err) ->
                     callback()
 
-        async.forEachSeries packedStrings, writePackedString, (err) ->
-            throw err if err
-            propagateLowerArchives()
-
         propagateLowerArchives = ->
             # Now we propagate the updates to lower-precision archives
             higher = archive
@@ -388,6 +386,10 @@ updateManyArchive = (fd, header, archive, points, cb) ->
                     cb null
             else
                 cb null
+
+        async.forEachSeries packedStrings, writePackedString, (err) ->
+            throw err if err
+            propagateLowerArchives()
 
 info = (path, cb) ->
     # FIXME: Close this stream?
