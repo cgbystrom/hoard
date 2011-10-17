@@ -1,7 +1,7 @@
 assert = require 'assert'
 fs = require 'fs'
 path = require 'path'
-hoard = require "hoard"
+hoard = require "../lib/hoard"
 equal = assert.equal
 
 FILENAME = 'test/large.whisper'
