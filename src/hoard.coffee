@@ -454,6 +454,102 @@ info = (path, cb) ->
                     archives: archives
     return
 
+last = (path, cb) ->
+    info path, (err, header) ->
+        now = unixTime()
+        from = now-1
+        to = now
+        diff = now - from
+        fd = null
+
+        # Find closest archive to look in, that will contain our information
+        for archive in header.archives
+            break if archive.retention >= diff
+
+        fromInterval = parseInt(from - from.mod(archive.secondsPerPoint)) + archive.secondsPerPoint
+        toInterval = parseInt(to - to.mod(archive.secondsPerPoint)) + archive.secondsPerPoint
+
+        file = fs.createReadStream(path)
+
+        Binary.stream(file)
+            .skip(archive.offset)
+            .word32bu('baseInterval')
+            .word32bu('baseValue')
+            .tap (vars) ->
+                if vars.baseInterval == 0
+                    # Nothing has been written to this hoard
+                    step = archive.secondsPerPoint
+                    points = (toInterval - fromInterval) / step
+                    timeInfo = [fromInterval, toInterval, step]
+                    values = (null for n in [0...points])
+                    cb(null, timeInfo, values)
+                else
+                    # We have data in this hoard, let's read it
+                    getOffset = (interval) ->
+                        timeDistance = interval - vars.baseInterval
+                        pointDistance = timeDistance / archive.secondsPerPoint
+                        byteDistance = pointDistance * pointSize
+                        a = archive.offset + byteDistance.mod(archive.size)
+                        a
+
+                    fromOffset = getOffset(fromInterval)
+                    toOffset = getOffset(toInterval)
+
+                    fs.open path, 'r', (err, fd) ->
+                        if err then throw err
+                        if fromOffset < toOffset
+                            # We don't wrap around, can everything in a single read
+                            size = toOffset - fromOffset
+                            seriesBuffer = new Buffer(size)
+                            try
+                                fs.read fd, seriesBuffer, 0, size, fromOffset, (err, num) ->
+                                    cb(err) if err
+                                    fs.close fd, (err) ->
+                                        cb(err) if err
+                                        unpack(seriesBuffer) # We have read it, go unpack!
+                            catch err
+                                cb(err)
+                        else
+                            # We wrap around the archive, we need two reads
+                            archiveEnd = archive.offset + archive.size
+                            size1 = archiveEnd - fromOffset
+                            size2 = toOffset - archive.offset
+                            seriesBuffer = new Buffer(size1 + size2)
+                            try
+                                fs.read fd, seriesBuffer, 0, size1, fromOffset, (err, num) ->
+                                    cb(err) if err
+                                    try
+                                        fs.read fd, seriesBuffer, size1, size2, archive.offset, (err, num) ->
+                                            cb(err) if err
+                                            unpack(seriesBuffer) # We have read it, go unpack!
+                                            fs.close(fd)
+                                    catch err
+                                        cb(err)
+                            catch err
+                                cb(err)
+
+        unpack = (seriesData) ->
+            # Optmize this?
+            numPoints = seriesData.length / pointSize
+            seriesFormat = "!" + ('Ld' for f in [0...numPoints]).join("")
+            unpackedSeries = pack.Unpack(seriesFormat, seriesData)
+
+            # Use buffer/pre-allocate?
+            valueList = (null for f in [0...numPoints])
+            currentInterval = fromInterval
+            step = archive.secondsPerPoint
+
+            for i in [0...unpackedSeries.length] by 2
+                pointTime = unpackedSeries[i]
+                if pointTime == currentInterval
+                    pointValue = unpackedSeries[i + 1]
+                    valueList[i / 2] = pointValue
+                currentInterval += step
+
+            timeInfo = [fromInterval, toInterval, step]
+            cb(null, timeInfo, valueList)
+    return
+    
 fetch = (path, from, to, cb) ->
     info path, (err, header) ->
         now = unixTime()
@@ -464,7 +560,7 @@ fetch = (path, from, to, cb) ->
         diff = now - from
         fd = null
 
-        # Find closest archive to look in, that iwll contain our information
+        # Find closest archive to look in, that will contain our information
         for archive in header.archives
             break if archive.retention >= diff
 
@@ -556,5 +652,6 @@ exports.create = create
 exports.update = update
 exports.updateMany = updateMany
 exports.info = info
+exports.last = last
 exports.fetch = fetch
 
