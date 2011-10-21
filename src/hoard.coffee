@@ -35,7 +35,7 @@ create = (filename, archives, xFilesFactor, cb) ->
     if path.existsSync(filename)
         cb new Error('File ' + filename + ' already exists')
 
-    oldest = (a[0] * a[1] for a in archives).sort().reverse()[0]
+    oldest = (a[0] * a[1] for a in archives).sort((a) -> Number(a))[0]
 
     encodeFloat = (value) ->
         # Dirty hack.
