@@ -245,7 +245,7 @@ update = (filename, value, timestamp, cb) ->
                             callback err, result
                 
                     async.forEachSeries propagateCalls, callPropagate, (err, result) ->
-                        throw err if err
+                        cb err if err
                         fs.close fd, cb
                 else
                     fs.close fd, cb
@@ -314,12 +314,12 @@ updateMany = (filename, points, cb) ->
                 currentPoints.push(point)
 
             async.series updateArchiveCalls, (err, results) ->
-                throw err if err
+                cb err if err
                 if currentArchive and currentPoints.length > 0
                     # Don't forget to commit after we've checked all the archives
                     currentPoints.reverse()
                     updateManyArchive fd, header, currentArchive, currentPoints, (err) ->
-                        throw err if err
+                        cb err if err
                         fs.close fd, cb
                 else
                     fs.close fd, cb
@@ -418,13 +418,13 @@ updateManyArchive = (fd, header, archive, points, cb) ->
                             callback err, result
         
                     async.forEachSeries propagateCalls, callPropagate, (err, result) ->
-                        throw err if err
+                        cb err if err
                         cb null
                 else
                     cb null
         
             async.forEachSeries packedStrings, writePackedString, (err) ->
-                throw err if err
+                cb err if err
                 propagateLowerArchives()
     catch err
         cb(err)
@@ -468,7 +468,7 @@ fetch = (path, from, to, cb) ->
         now = unixTime()
         oldestTime = now - header.maxRetention
         from = oldestTime if from < oldestTime
-        throw new Error('Invalid time interval') unless from < to
+        cb(new Error('Invalid time interval')) unless from < to
         to = now if to > now or to < from
         diff = now - from
         fd = null
@@ -507,7 +507,7 @@ fetch = (path, from, to, cb) ->
                     toOffset = getOffset(toInterval)
 
                     fs.open path, 'r', (err, fd) ->
-                        if err then throw err
+                        cb err if err
                         if fromOffset < toOffset
                             # We don't wrap around, can everything in a single read
                             size = toOffset - fromOffset
