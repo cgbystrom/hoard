@@ -345,7 +345,7 @@ updateManyArchive = (fd, header, archive, points, cb) ->
         [interval, value] = ap
 
         if !previousInterval or (interval == previousInterval + step)
-            currentString.concat(pack.Pack(pointFormat, [interval, value]))
+            currentString= currentString.concat(pack.Pack(pointFormat, [interval, value]))
             previousInterval = interval
         else
             numberOfPoints = currentString.length / pointSize
