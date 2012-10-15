@@ -31,8 +31,58 @@ archiveInfoSize = pack.CalcLength(archiveInfoFormat)
 # of statsd.  (Am open to alternative approaches though...)
 unixTime = -> Math.round(new Date().getTime() / 1000)
 
-create = (filename, archives, xFilesFactor, cb) ->
-    # FIXME: Check parameters
+aggregationTypeToMethod =
+  1: 'average'
+  2: 'sum'
+  3: 'last'
+  4: 'max'
+  5: 'min'
+
+aggregationMethodToType =
+ 'average': 1
+ 'sum'    : 2
+ 'last'   : 3
+ 'max'    : 4
+ 'min'    : 5
+
+aggregationTypes = ['average','sum','last','max','min']
+
+sum = (list) ->
+    s = 0
+    for x in list
+        s += x
+    s
+
+aggregate = (aggregationMethod, knownValues) ->
+    if aggregationMethod == 'average'
+        return sum(knownValues) / knownValues.length
+    else if aggregationMethod == 'sum'
+        return sum(knownValues)
+    else if aggregationMethod == 'last'
+        return knownValues[knownValues.length-1]
+    else if aggregationMethod == 'max'
+        return Math.max(knownValues)
+    else if aggregationMethod == 'min'
+        return Math.min(knownValues)
+    else
+        throw new Error( "Unrecognized aggregation method "+ aggregationMethod )
+
+create = (filename, archives, xFilesFactor, aggregationMethod, cb) ->
+    
+    # Deal with allowing xFilesFactor and aggregationMethod to be optional (and defaulted)
+    if( cb == undefined && typeof(xFilesFactor) == 'function' )
+        cb= xFilesFactor
+        xFilesFactor= 0.5
+        aggregationMethod= 'average'
+    else if( cb == undefined && typeof(aggregationMethod) == 'function' )
+        cb= aggregationMethod
+        aggregationMethod= 'average'
+
+    if !( aggregationMethod in aggregationTypes)
+      cb new Error("'" + aggregationMethod + "' is not a valid aggregation method.")
+      return
+
+      # FIXME: Check parameters
     # FIXME: Check that values are correctly formatted
     archives.sort (a, b) -> a[0] - b[0]
 
@@ -50,7 +100,7 @@ create = (filename, archives, xFilesFactor, cb) ->
         buffer
 
     buffer = Put()
-        .word32be(unixTime()) # last update
+        .word32be(aggregationMethodToType[aggregationMethod])
         .word32be(oldest) # max retention
         .put(encodeFloat(xFilesFactor))
         .word32be(archives.length)
@@ -72,7 +122,10 @@ create = (filename, archives, xFilesFactor, cb) ->
     # FIXME: fsync this?
     fs.writeFile filename, buffer.buffer(), 'binary', cb
 
-propagate = (fd, timestamp, xff, higher, lower, cb) ->
+propagate = (fd, header, timestamp, higher, lower, cb) ->
+    xff= header.xFilesFactor
+    aggregationMethod= header.aggregationMethod
+
     lowerIntervalStart = timestamp - timestamp.mod(lower.secondsPerPoint)
     lowerIntervalEnd = lowerIntervalStart + lower.secondsPerPoint
 
@@ -160,16 +213,10 @@ propagate = (fd, timestamp, xff, higher, lower, cb) ->
             cb null, false
             return
 
-        sum = (list) ->
-            s = 0
-            for x in list
-                s += x
-            s
-
         knownPercent = knownValues.length / neighborValues.length
         if knownPercent >= xff
             # We have enough data to propagate a value!
-            aggregateValue = sum(knownValues) / knownValues.length # TODO: Another CF besides average?
+            aggregateValue = aggregate( aggregationMethod, knownValues )
             myPackedPoint = pack.Pack(pointFormat, [lowerIntervalStart, aggregateValue])
 
             # !!!!!!!!!!!!!!!!!
@@ -200,6 +247,8 @@ propagate = (fd, timestamp, xff, higher, lower, cb) ->
 update = (filename, value, timestamp, cb) ->
     # FIXME: Check file lock?
     # FIXME: Don't use info(), re-use fd between internal functions
+    # FIXME: Don't carry on after an error callback!
+
     info filename, (err, header) ->
         cb(err) if err
         now = unixTime()
@@ -244,7 +293,7 @@ update = (filename, value, timestamp, cb) ->
                         higher = lower
                 
                     callPropagate = (args, callback) ->
-                        propagate fd, args.interval, args.header.xFilesFactor, args.higher, args.lower, (err, result) ->
+                        propagate fd, args.header, args.interval, args.higher, args.lower, (err, result) ->
                             cb err if err
                             callback err, result
                 
@@ -417,7 +466,7 @@ updateManyArchive = (fd, header, archive, points, cb) ->
                         higher = lower
         
                     callPropagate = (args, callback) ->
-                        propagate fd, args.interval, args.header.xFilesFactor, args.higher, args.lower, (err, result) ->
+                        propagate fd, args.header, args.interval, args.higher, args.lower, (err, result) ->
                             cb err if err
                             callback err, result
         
@@ -445,13 +494,17 @@ info = (path, cb) ->
         archives = []; metadata = {}
 
         Binary.parse(data)
-            .word32bu('lastUpdate')
+            .word32bu('aggregationMethod')
             .word32bu('maxRetention')
             .buffer('xff', 4) # Must decode separately since node-binary can't handle floats
             .word32bu('archiveCount')
             .tap (vars) ->
                 metadata = vars
                 metadata.xff = pack.Unpack('!f', vars.xff, 0)[0]
+                if aggregationTypeToMethod[metadata.aggregationMethod] != undefined
+                  metadata.aggregationMethod = aggregationTypeToMethod[metadata.aggregationMethod]
+                else
+                  metadata.aggregationMethod = 'average'
                 @flush()
                 for index in [0...metadata.archiveCount]
                     @word32bu('offset').word32bu('secondsPerPoint').word32bu('points')
@@ -465,6 +518,7 @@ info = (path, cb) ->
                     maxRetention: metadata.maxRetention
                     xFilesFactor: metadata.xff
                     archives: archives
+                    aggregationMethod: metadata.aggregationMethod
     return
 
 fetch = (path, from, to, cb) ->
