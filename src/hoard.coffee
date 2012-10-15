@@ -25,7 +25,11 @@ metadataSize = pack.CalcLength(metadataFormat)
 archiveInfoFormat = "!3L"
 archiveInfoSize = pack.CalcLength(archiveInfoFormat)
 
-unixTime = -> parseInt(new Date().getTime() / 1000)
+# N.B. This rounds *up* rather than down a-la python-whisper
+# I've done this just so that if hoard.js is used as the backend
+# of statsd the timestamps it generates will never be *behind* those
+# of statsd.  (Am open to alternative approaches though...)
+unixTime = -> Math.round(new Date().getTime() / 1000)
 
 create = (filename, archives, xFilesFactor, cb) ->
     # FIXME: Check parameters
