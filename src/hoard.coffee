@@ -1,3 +1,4 @@
+assert = require 'assert'
 fs = require 'fs'
 Buffer = require('buffer').Buffer
 Binary = require 'binary'
