@@ -42,7 +42,7 @@ create = (filename, archives, xFilesFactor, cb) ->
         # Using 'buffer_ieee754' from node 0.5.x
         # as no libraries had a working IEEE754 encoder
         buffer = new Buffer(4)
-        require('./buffer_ieee754').writeIEEE754(buffer, 0.5, 0, 'big', 23, 4);
+        require('./buffer_ieee754.js').writeIEEE754(buffer, 0.5, 0, 'big', 23, 4);
         buffer
 
     buffer = Put()
