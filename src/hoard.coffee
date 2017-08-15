@@ -32,7 +32,7 @@ create = (filename, archives, xFilesFactor, cb) ->
     # FIXME: Check that values are correctly formatted
     archives.sort (a, b) -> a[0] - b[0]
 
-    if path.existsSync(filename)
+    if fs.existsSync(filename)
         cb new Error('File ' + filename + ' already exists')
 
     oldest = (a[0] * a[1] for a in archives).sort().reverse()[0]
